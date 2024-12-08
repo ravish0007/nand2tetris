@@ -1,0 +1,13 @@
+/**
+ * Or gate:
+ * if (a or b) out = 1, else out = 0 
+ */
+CHIP Or {
+    IN a, b;
+    OUT out;
+    PARTS:
+    Not(in=a , out=anot );
+    Not(in=b , out=bnot );
+    And(a=anot , b=bnot , out=adotb );
+    Not(in=adotb , out=out );
+}
