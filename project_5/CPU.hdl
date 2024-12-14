@@ -14,8 +14,47 @@ CHIP CPU {
     PARTS:
 	//// Replace this comment with your code.
 
-    
+
+    Not(in=instruction[15], out=ainstruction);
+    Not(in=ainstruction , out=cinstruction );
 
 
 
+    And(a=cinstruction , b=instruction[5] , out=alutoA );   
+    Mux16(a=instruction , b=aluout , sel=alutoA, out=ain );
+
+    Or(a=ainstruction, b=alutoA , out=aload );
+    ARegister(in=ain, load=aload, out=aout, out[0..14]=addressM );
+
+
+    Mux16(a=aout , b=inM , sel=instruction[12] , out=alubin);
+
+    And(a=cinstruction, b=instruction[4], out=loadd);
+    DRegister(in=aluout , load=loadd , out=dout );
+    ALU(x=dout, y=alubin , zx=instruction[11] , nx=instruction[10] , zy=instruction[9] , ny=instruction[8] , f=instruction[7] , no=instruction[6] , out=aluout, out=outM , zr=zr , ng=ng );
+
+
+    And(a=cinstruction , b=instruction[3] , out=writeM );
+
+
+   
+    And(a=true, b=instruction[0], out=j3);
+    And(a=true, b=instruction[1], out=j2);
+    And(a=true, b=instruction[2], out=j1);
+
+    Or(a=zr, b=ng, out=lteqz);
+    Not(in=lteqz, out=isPositive);
+
+    And(a=ng, b=j1, out=jlt); 
+    And(a=zr, b=j2, out=jeq);    
+    And(a=isPositive, b=j3, out=jgt);
+
+    Or(a=jeq, b=jlt, out=jle);
+    Or(a=jle, b=jgt, out=shouldJump);
+
+    And(a=cinstruction, b=shouldJump, out=shouldLoad);
+
+    Not(in=shouldLoad, out=shouldinc);
+
+    PC(in=aout , load=shouldLoad , inc=shouldinc , reset=reset, out[0..14]=pc);
 }
