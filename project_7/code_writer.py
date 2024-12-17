@@ -17,7 +17,7 @@ def generate_unary_arithmetic(type):
 
 def generate_binary_arithmetic(type):
     operation_type = {
-            'add': 'M=M+D',
+            'add': 'M=D+M',
             'sub': 'M=M-D',
             'or': 'M=M|D',
             'and': 'M=M&D'
@@ -47,7 +47,7 @@ def generate_comparision(type, label):
                  'D=-1',
                  f'(jumpfalse{label})',
                  '@SP',
-                 'A=M-1'
+                 'A=M-1',
                  'M=D',
                 ]
     return generate_assembly_output(type, commands)
@@ -63,10 +63,16 @@ def generate_push(segment, index, label):
          'temp': '5'
     }
 
+    address_memory = {
+            'temp': 'D=A',
+            'pointer': 'D=A',
+            'rest': 'D=M'
+            }
+
     push_type = {
             'static': [ f"@{label}.{index}", "D=M"],
             'constant': [ f'@{index}', 'D=A' ],
-            'rest': [ f'@{location_mapping.get(segment, "ERRRORRRR")}', 'D=M', f'@{index}', 'A=D+A', 'D=M' ]
+            'rest': [ f'@{location_mapping.get(segment, "ERRRORRRR")}', f'{address_memory.get(segment, address_memory["rest"])}', f'@{index}', 'A=D+A', 'D=M' ]
     }
     commands = [ *push_type.get(segment, push_type['rest']), '@SP', 'A=M', 'M=D', '@SP', 'M=M+1' ]
     return generate_assembly_output(segment, commands)
@@ -74,9 +80,8 @@ def generate_push(segment, index, label):
 
 def generate_pop(segment, index, label):
 
-
     if segment == 'static':
-        return generate_assembly_output(f'pop {segment} {index}', [f'@{label}.{index}', 'D=M', '@SP', 'A=M', 'M=D', '@SP' 'M=M+1'])
+        return generate_assembly_output(f'pop {segment} {index}', ['@SP', 'AM=M-1', 'D=M', f'@{label}.{index}','M=D'])
 
     location_mapping = {
          'this': 'THIS',
@@ -87,11 +92,17 @@ def generate_pop(segment, index, label):
          'temp': '5'
     }
 
+    address_memory = {
+            'temp': 'D=A',
+            'pointer': 'D=A',
+            'rest': 'D=M'
+            }
+
     commands = [
                f'@{location_mapping[segment]}',
-               'D=A',
+               f'{address_memory.get(segment, address_memory["rest"])}',
                f'@{index}',
-               'D=M+D',
+               'D=D+A',
                '@R13',
                'M=D',
                '@SP',
