@@ -1,0 +1,143 @@
+class Main {
+    static int n_targets;
+    static Array targets;
+    static int points;
+    static int x0, y0;
+    static int size;
+
+  function void main() {
+    do Main.initalize();
+    do Main.play();
+    return; 
+  }
+
+  function void play() {
+
+    var int key;
+    var int prevx, prevy;
+    var int counter;
+    var int a,b;
+    var int i, j;
+
+    let counter = 0;
+    let x0 = 256;
+    let y0 = 112;
+
+    let prevx = x0;
+    let prevy = y0;
+
+    let points = 0;
+    
+    let key = 0;
+  
+    do Screen.setColor(true);
+    do Screen.drawCircle(prevx, prevy, 5);
+    
+    while (points < targets) {
+        while (~(key)) {
+          let key =  Keyboard.keyPressed();
+
+          do Sys.wait(50);
+          let counter =  counter + 1;
+
+        }
+
+        if (key = 131) {
+            let y0 = y0 - 5;
+        }
+
+        if (key = 133) {
+
+          let y0 = y0 + 5;
+        }
+
+        if (key = 130) {
+            let x0 = x0 - 5;
+        }
+
+        if (key = 132) {
+            let x0 = x0 + 5;
+        }
+        
+
+        do Screen.setColor(false);
+        do Screen.drawCircle(prevx, prevy, 5);
+
+        let prevx = x0;
+        let prevy = y0;
+        let key = 0;
+
+        do Screen.setColor(true);
+        do Screen.drawCircle(prevx, prevy, 5);
+
+        let i = 0;
+        let j = 0;
+        while (i < n_targets) {
+
+          let a = targets[j];
+          let j = j + 1;
+          let b = targets[j];
+          let j = j + 1;
+
+          if( ((prevx > a) & (prevx < (a+size))) & ((prevy > b) & (prevy < (b+size)))   ) {
+              let points = points + 1;
+              do PopulateScreen.eraseTarget(a, b, size);
+              let targets[j-2] = 0;
+              let targets[j-1] = 0;
+          }
+
+          let i = i + 1;
+        }
+
+
+        if (points = n_targets) {
+          do Screen.clearScreen();
+          do Output.moveCursor(0,0);
+          do Output.printString("Game over! Time took: ");
+          do Output.printInt(counter);
+          do Sys.halt();
+        }
+
+    }
+    return; 
+  }
+
+
+  function void initalize() {
+    
+    var int x, y, i, j;
+    var int keypressed;
+    var int counter;
+
+    let size = 30;
+    let keypressed = 0;
+    let counter = 1;
+
+    while (~(keypressed)) {
+      let keypressed =  Keyboard.readChar();
+      let counter = counter + 1;
+    }
+
+    do Random.setSeed(counter);
+    let n_targets = 10;
+    let targets = Array.new(2 * n_targets);
+
+    
+    let i = 0;
+    let j = 0;
+    while (i < n_targets) {
+        let x = Random.randRange(511-size);
+        do Random.setSeed(x);
+        let y = Random.randRange(255-size);
+        do Random.setSeed(x);
+        do PopulateScreen.drawTarget(x, y, size);
+
+        let targets[j] = x;
+        let j = j+1;
+        let targets[j] = y;
+        let j = j + 1;
+        let i = i + 1;
+    }
+    return;
+  }
+}

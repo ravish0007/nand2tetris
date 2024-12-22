@@ -1,0 +1,17 @@
+
+
+
+class PopulateScreen {
+  function void drawTarget(int x, int y, int size) {
+      do Screen.setColor(true);
+      do Screen.drawRectangle(x, y, x+size, y+size);
+      return;
+  }
+
+  function void eraseTarget(int x, int y, int size) {
+      do Screen.setColor(false);
+      do Screen.drawRectangle(x, y, x+size, y+size);
+      return;
+  }
+
+}
