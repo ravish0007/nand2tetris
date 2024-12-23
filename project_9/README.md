@@ -2,6 +2,10 @@
 
 This game is about attacking targets in less amount of time as possible.
 
+## Video instructions
+
+https://youtu.be/009MB4_5w24
+
 ## Download nand2tetris software suite
 
 https://drive.google.com/file/d/1IkIR8Pwq3PY49QgXpUJOkUUVht-TKIET/view
