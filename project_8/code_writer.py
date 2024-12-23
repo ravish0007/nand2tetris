@@ -13,7 +13,7 @@ def generate_unary_arithmetic(type):
 
 
 def generate_binary_arithmetic(type):
-    operation_type = {"add": "M=D+M", "sub": "M=M-D", "or": "M=M|D", "and": "M=M&D"}
+    operation_type = {"add": "M=D+M", "sub": "M=M-D", "or": "M=D|M", "and": "M=D&M"}
     commands = ["@SP", "AM=M-1", "D=M", "@SP", "A=M-1", operation_type[type]]
     return generate_assembly_output(type, commands)
 
