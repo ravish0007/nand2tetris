@@ -74,7 +74,7 @@ class Tokenizer:
 
     def match_keyword(self, string):
         for keyword in self.keywords:
-            if self.current_line.startswith(keyword):
+            if re.match(r"^" + keyword + r"\W", string):
                 remaining = self.current_line[len(keyword) :].strip()
                 return [keyword, remaining]
 
