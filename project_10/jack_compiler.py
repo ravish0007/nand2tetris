@@ -1,24 +1,45 @@
 import xml.etree.cElementTree as ET
 import xml.etree.ElementTree as ElementTree
 
+import re
+from collections import deque
+
 from jack_tokenizer import TokenType
 from jack_tokenizer import Keyword
 
 
 class Compiler:
 
-    def __init__(self, tokenizer):
+    def __init__(self, tokenizer, output_file):
         self.tokenizer = tokenizer
+        self.output_file = output_file
         self.root = None
         self.token = ""
         self._token_type = None
 
-    def process(self, token):
+    def process(self, token, skip_advance=False):
 
         if self.token == token:
-            self.advance()
+            if not skip_advance:
+                self.advance()
         else:
             raise Exception(f"token {token} not found")
+
+    def writeFile(self, tree):
+
+        ElementTree.indent(tree)
+
+        empty_tag_broken_string = re.sub(
+            r"<(\w+)([^>]*)></\1>",
+            r"<\1\2>\n</\1>",
+            ElementTree.tostring(
+                tree, encoding="unicode", short_empty_elements=False
+            ),
+        )
+        formatted_xml = re.sub(
+            r"(<\w+[^>]*>)(.*?)(</\w+>)", r"\1 \2 \3", empty_tag_broken_string
+        )
+        open(self.output_file +'.xml', "w").write(formatted_xml)
 
     def advance(self):
 
@@ -55,16 +76,24 @@ class Compiler:
 
         while self.token in {"constructor", "function", "method"}:
             self.compileSubroutine(self.root)
-            self.advance()
 
-        tree = ET.ElementTree(self.root)
-        ElementTree.indent(self.root)
-        open("filename.xml", "w").write(
-            ElementTree.tostring(
-                self.root, encoding="unicode", short_empty_elements=False
-            )
+        self.process("}", skip_advance=True)
+        ET.SubElement(self.root, "symbol").text = "}"
+        
+        self.writeFile(self.root)
+
+    def debug_tree(self, tree):
+
+        empty_tag_broken_string = re.sub(
+            r"<(\w+)([^>]*)></\1>",
+            r"<\1\2>\n</\1>",
+            ElementTree.tostring(tree, encoding="unicode", short_empty_elements=False),
         )
-        # tree.write("filename.xml")
+        formatted_xml = re.sub(
+            r"(<\w+[^>]*>)(.*?)(</\w+>)", r"\1 \2 \3", empty_tag_broken_string
+        )
+
+        print(formatted_xml)
 
     def compileClassVarDec(self, tree):
         class_var_tree = ET.Element("classVarDec")
@@ -220,12 +249,19 @@ class Compiler:
 
         self.advance()
 
-        # TODO: handle array
+        if self.token == "[" and self._token_type == TokenType.SYMBOL:
+            self.process("[")
+            ET.SubElement(let_statement_tree, "symbol").text = "["
+            expression_list = self.extractExpression("[")
+            self.compileExpression(let_statement_tree, expression_list)
+            self.process("]")
+            ET.SubElement(let_statement_tree, "symbol").text = "]"
 
         self.process("=")
         ET.SubElement(let_statement_tree, "symbol").text = "="
 
         expression_list = self.extractExpression(";")
+
         self.compileExpression(let_statement_tree, expression_list)
 
         self.process(";")
@@ -233,33 +269,75 @@ class Compiler:
 
         tree.append(let_statement_tree)
 
-    def extractExpression(self, start_symbol):
+    def extractExpression(self, start_symbol, debug=False, result=None, count=1):
 
-        end_symbols = {"(": ")", "{": "}", ";": ";"}
+        end_symbols = {"(": ")", "{": "}", "[": "]", ";": ";"}
 
-        store = []
-        temp_q = [(start_symbol, TokenType.SYMBOL)]
+        if result is None:
+            result = deque()
 
-        while temp_q:
-            if (
-                self.token in end_symbols.values()
-                and self.token == end_symbols[start_symbol]
-                and self._token_type == TokenType.SYMBOL
-            ):
-                while temp_q and temp_q[-1][0] != start_symbol:
-                    store.append(temp_q.pop())
+        result.append([self.token, self._token_type])
 
-                bracket = temp_q.pop()
+        if debug:
+            # self.debug_list(_list)
+            pass
 
-                if len(temp_q) > 0:
-                    store.append(bracket)
-                else:
-                    break
-            temp_q.append((self.token, self._token_type))
-            self.advance()
+        is_closing_token = (
+            self.token in end_symbols.values()
+            and self.token == end_symbols[start_symbol]
+            and self._token_type == TokenType.SYMBOL
+        )
 
-        store.reverse()
-        return store
+        new_count = count
+        if is_closing_token:
+            new_count -= 1
+        elif self.token == start_symbol:
+            new_count += 1
+
+        if new_count == 0:
+            result.pop()
+
+            return result
+
+        self.advance()
+        return self.extractExpression(start_symbol, debug, result, new_count)
+
+    def extractExpressionFromList(
+        self, start_symbol, _list, debug=False, result=None, count=1
+    ):
+
+        end_symbols = {"(": ")", "{": "}", "[": "]", ";": ";"}
+
+        if result is None:
+            result = deque()
+
+        token, token_type = _list.popleft()
+        result.append([token, token_type])
+
+        if debug:
+            print("list -> ", end="")
+            self.debug_list(_list)
+
+        is_closing_token = (
+            token in end_symbols.values()
+            and token == end_symbols[start_symbol]
+            and token_type == TokenType.SYMBOL
+        )
+
+        new_count = count
+        if is_closing_token:
+            new_count -= 1
+        elif token == start_symbol:
+            new_count += 1
+
+        if new_count == 0:
+            result.pop()
+
+            return result
+
+        return self.extractExpressionFromList(
+            start_symbol, _list, debug, result, new_count
+        )
 
     def compileIf(self, tree):
         if_statement_tree = ET.Element("ifStatement")
@@ -272,7 +350,6 @@ class Compiler:
 
         expression_list = self.extractExpression("(")
 
-        # if expression_list:
         self.compileExpression(if_statement_tree, expression_list)
 
         self.process(")")
@@ -334,40 +411,64 @@ class Compiler:
         self.process("do")
         ET.SubElement(do_statement_tree, "keyword").text = "do"
 
-        # expression_list = self.extractExpression(";")
-        self.compileSubroutineCall(do_statement_tree)
+        expression_list = self.extractExpression(";")
+        self.compileSubroutineCall(do_statement_tree, expression_list)
 
         self.process(";")
         ET.SubElement(do_statement_tree, "symbol").text = ";"
 
         tree.append(do_statement_tree)
 
-    def compileSubroutineCall(self, tree):
+    def debug_list(self, _list):
+        print(" ".join([str(x[0]) for x in _list]))
 
-        ET.SubElement(tree, "identifier").text = self.token
-        self.advance()
+    def compileSubroutineCall(self, tree, _list, debug=False):
 
-        if self.token == "(" and self._token_type == TokenType.SYMBOL:
+        if not _list:
+            raise Exception("Empty expression_list while parsing subroutine")
 
-            self.process("(")
+        def advance(_list):
+            if _list:
+                token, token_type = _list.popleft()
+                return token, token_type
+
+        def process(string):
+            nonlocal token
+            nonlocal token_type
+            if string == token:
+                token, token_type = advance(_list)
+            else:
+                raise Exception(f"processing  {token} but found {string}")
+
+        token, token_type = advance(_list)
+
+        if token_type == TokenType.IDENTIFIER:
+            ET.SubElement(tree, "identifier").text = token
+            token, token_type = advance(_list)
+        else:
+            raise Exception("Invalid subroutine")
+
+        if token == "(" and token_type == TokenType.SYMBOL:
             ET.SubElement(tree, "symbol").text = "("
-            expression_list = self.extractExpression("(")
+
+            expression_list = self.extractExpressionFromList("(", _list)
+
             self.compileExpressionList(tree, expression_list)
-            self.process(")")
             ET.SubElement(tree, "symbol").text = ")"
 
-        elif self.token == "." and self._token_type == TokenType.SYMBOL:
-            self.process(".")
+        elif token == "." and token_type == TokenType.SYMBOL:
+            process(".")
             ET.SubElement(tree, "symbol").text = "."
 
-            ET.SubElement(tree, "identifier").text = self.token
-            self.advance()
+            ET.SubElement(tree, "identifier").text = token
+            token, token_type = advance(_list)
 
-            self.process("(")
+            if not token == "(":
+                raise Exception("Invalid subroutine")
+
             ET.SubElement(tree, "symbol").text = "("
-            expression_list = self.extractExpression("(")
+            expression_list = self.extractExpressionFromList("(", _list)
             self.compileExpressionList(tree, expression_list)
-            self.process(")")
             ET.SubElement(tree, "symbol").text = ")"
 
     def compileReturn(self, tree):
@@ -392,34 +493,129 @@ class Compiler:
 
         tree.append(return_statement_tree)
 
-    def compileExpression(self, tree, expression_list):
+    def compileExpression(self, tree, _list):
         expression_tree = ET.Element("expression")
-        expression_tree.text = ""
 
-        # print(expression_list)
+        bin_operators = {"+", "-", "*", "/", "&", "|", "<", ">", "="}
+        term_list = deque()
 
-        expression_tree.text = " ".join(str(x[0]) for x in expression_list)
 
-        # while not (self.token == ";" and self._token_type == TokenType.SYMBOL):
-        #     expression_tree.text += f" {self.token}"
-        #     self.advance()
+        while _list:
+            token, token_type = _list.popleft()
+
+            if token in ["(", "["] and token_type == TokenType.SYMBOL:
+
+                term_list.append([token, token_type])
+                subexpression = self.extractExpressionFromList(token, _list)
+                term_list.extend(subexpression)
+                term_list.append([")" if token == "(" else "]", token_type])
+                continue
+
+            is_unary = (
+                token in ["-", "~"]
+                and token_type == TokenType.SYMBOL
+                and len(term_list) == 0
+            )
+
+            if (
+                token in bin_operators
+                and token_type == TokenType.SYMBOL
+                and not is_unary
+            ):  # evading just "-" unary, term
+                self.compileTerm(expression_tree, term_list)
+                term_list.clear()
+                ET.SubElement(expression_tree, "symbol").text = token
+                continue
+
+            term_list.append([token, token_type])
+
+        if term_list:
+            self.compileTerm(expression_tree, term_list)
+
         tree.append(expression_tree)
 
-    def compileTerm(self, tree):
-        pass
+    def compileTerm(self, tree, _list):
+        term_tree = ET.Element("term")
+
+        keyword_constants = [
+            "true",
+            "false",
+            "null",
+            "this",
+        ]
+
+        unary_ops = ["-", "~"]
+
+        if len(_list) == 1:
+            token, token_type = _list.popleft()
+            if token_type == TokenType.INT_CONST:
+                ET.SubElement(term_tree, "integerConstant").text = str(token)
+            elif token_type == TokenType.STRING_CONST:
+                ET.SubElement(term_tree, "stringConstant").text = token
+            elif token_type == TokenType.KEYWORD and token in keyword_constants:
+                ET.SubElement(term_tree, "keyword").text = token
+            elif token_type == TokenType.IDENTIFIER:
+                ET.SubElement(term_tree, "identifier").text = token
+        else:
+            token, token_type = _list.popleft()
+
+            if token_type == TokenType.SYMBOL and token in unary_ops:
+                ET.SubElement(term_tree, "symbol").text = token
+                self.compileTerm(term_tree, _list)
+
+            elif token_type == TokenType.IDENTIFIER:
+                next_token, next_token_type = _list.popleft()
+
+                if next_token == "[":
+                    ET.SubElement(term_tree, "identifier").text = token
+                    ET.SubElement(term_tree, "symbol").text = next_token
+                    subexpression = self.extractExpressionFromList(next_token, _list)
+                    self.compileExpression(term_tree, subexpression)
+                    ET.SubElement(term_tree, "symbol").text = "]"
+
+                else:
+                    _list.appendleft([next_token, next_token_type])
+                    _list.appendleft([token, token_type])
+                    self.compileSubroutineCall(term_tree, _list)
+
+            elif token == "(":
+                ET.SubElement(term_tree, "symbol").text = "("
+                subexpression = self.extractExpressionFromList("(", _list)
+
+                self.compileExpression(term_tree, subexpression)
+                ET.SubElement(term_tree, "symbol").text = ")"
+
+        tree.append(term_tree)
 
     def compileExpressionList(self, tree, _list):
 
         expression_list_tree = ET.Element("expressionList")
-        expression_list_tree.text = ""
 
-        # print(expression_list)
+        expression_list = deque()
 
-        expression_list_tree.text = " ".join(str(x[0]) for x in _list)
+        while _list:
+            token, token_type = _list.popleft()
 
-        # while not (self.token == ";" and self._token_type == TokenType.SYMBOL):
-        #     expression_tree.text += f" {self.token}"
-        #     self.advance()
+            if token in ["(", "["] and token_type == TokenType.SYMBOL:
+
+                expression_list.append([token, token_type])
+                subexpression = self.extractExpressionFromList(token, _list)
+                expression_list.extend(subexpression)
+                expression_list.append([")" if token == "(" else "]", token_type])
+
+                continue
+
+            if token == "," and token_type == TokenType.SYMBOL:
+
+                self.compileExpression(expression_list_tree, expression_list)
+                expression_list.clear()
+                ET.SubElement(expression_list_tree, "symbol").text = ","
+                continue
+
+            expression_list.append([token, token_type])
+
+        # compile the last expression
+        if expression_list:
+            self.compileExpression(expression_list_tree, expression_list)
+
         tree.append(expression_list_tree)
-
-        pass
